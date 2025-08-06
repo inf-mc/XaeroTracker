@@ -1,0 +1,5 @@
+name: XaeroTracker
+version: '1.0.0'
+main: info.infinf.xaeroTracker.XaeroTracker
+api-version: '1.20'
+depend: []
