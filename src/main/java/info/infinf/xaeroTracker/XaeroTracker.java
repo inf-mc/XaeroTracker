@@ -1,8 +1,11 @@
 package info.infinf.xaeroTracker;
 
+import info.infinf.xaeroTracker.Commands.Executor;
 import info.infinf.xaeroTracker.util.MessageUtil;
+import info.infinf.xaeroTracker.util.PlayerUtil;
 import io.netty.buffer.Unpooled;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -20,7 +23,10 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
     public static final @NotNull String MINIMAP_PACKET_ID = "xaerominimap:main";
     public static final @NotNull String WORLD_MAP_PACKET_ID = "xaeroworldmap:main";
 
-    public final Map<Player, PlayerData> playerData = new HashMap<>();
+    public final @NotNull Map<@NotNull Player, @NotNull PlayerData> playerData = new HashMap<>();
+
+    public FilePlayerList trackIgnoreList;
+    public FilePlayerList trackBypassList;
     public boolean shouldSendLevelId;
     public int levelId;
     public long syncCooldown;
@@ -37,6 +43,9 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         levelId = conf.getInt("level-id");
         syncCooldown = conf.getInt("sync-cooldown", 250);
 
+        trackIgnoreList = new FilePlayerList(this, getDataPath().resolve("track_ignore_list.yml").toFile());
+        trackBypassList = new FilePlayerList(this, getDataPath().resolve("track_bypass_list.yml").toFile());
+
         var messenger = Bukkit.getMessenger();
         messenger.registerIncomingPluginChannel(
                 this, MINIMAP_PACKET_ID, this::onMinimapMessageReceived);
@@ -45,7 +54,18 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         messenger.registerOutgoingPluginChannel(this, MINIMAP_PACKET_ID);
         messenger.registerOutgoingPluginChannel(this, WORLD_MAP_PACKET_ID);
 
-        this.getServer().getPluginManager().registerEvents(this, this);
+        getServer().getPluginManager().registerEvents(this, this);
+        var cmd = getCommand("xaerotracker");
+        if (cmd != null) {
+            cmd.setExecutor(new Executor(this));
+            cmd.setPermission("xaerotracker");
+            cmd.setUsage(
+                    "/xt toggleTracked\n" +
+                    "/xt toggleTracked <player name>\n" +
+                    "/xt toggleTrackEveryone\n" +
+                    "/xt toggleTrackEveryone <player name>"
+            );
+        }
     }
 
     @EventHandler
@@ -78,6 +98,7 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         var data = playerData.get(pl);
         if (data != null) {
             sendModderBothChannels(pl, data, MessageUtil.getLevelIdMessage(levelId));
+            track(pl);
         }
     }
 
@@ -125,15 +146,41 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         trackOthers(pl, WORLD_MAP_PACKET_ID);
     }
 
+    public boolean shouldBeTracked(Player pl) {
+        return !trackIgnoreList.contains(pl.getName()) &&
+                !pl.isInvisible() &&
+                pl.getGameMode() != GameMode.SPECTATOR &&
+                !PlayerUtil.isVanished(pl);
+    }
+
     /**
      * Sync location of pl to other players on server
      *
      * @param pl
      */
     public void track(Player pl) {
-        byte[] msg;
-        msg = MessageUtil.getTrackPlayerMessage(pl);
+        var msg = MessageUtil.getTrackPlayerMessage(pl);
+        var server = pl.getServer();
+        var shouldTrack = shouldBeTracked(pl);
 
+        for(var other: server.getOnlinePlayers()) {
+            if (other == pl || (!shouldTrack && !trackBypassList.contains(other.getName()))) {
+                continue;
+            }
+            var data = playerData.get(other);
+            if (data != null) {
+                sendModderOneChannel(other, data, msg);
+            }
+        }
+    }
+
+    /**
+     * Sync location of pl to other players on server, ignoring any other condition such as invisibility
+     *
+     * @param pl
+     */
+    public void trackUnconditionally(Player pl) {
+        var msg = MessageUtil.getTrackPlayerMessage(pl);
         var server = pl.getServer();
 
         for(var other: server.getOnlinePlayers()) {
@@ -154,6 +201,20 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      * @param channel
      */
     public void trackOthers(Player pl, String channel) {
+        for (var other: pl.getServer().getOnlinePlayers()) {
+            if (other != pl && (shouldBeTracked(other) || trackBypassList.contains(pl.getName()))) {
+                pl.sendPluginMessage(this, channel, MessageUtil.getTrackPlayerMessage(other));
+            }
+        }
+    }
+
+    /**
+     * Sync other players' location to pl, ignoring any other condition such as invisibility
+     *
+     * @param pl
+     * @param channel
+     */
+    public void trackOthersUnconditionally(Player pl, String channel) {
         for (var other: pl.getServer().getOnlinePlayers()) {
             if (other != pl) {
                 pl.sendPluginMessage(this, channel, MessageUtil.getTrackPlayerMessage(other));

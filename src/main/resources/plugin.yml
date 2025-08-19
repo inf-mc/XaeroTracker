@@ -1,5 +1,38 @@
 name: XaeroTracker
-version: '1.0.0'
+version: ${version}
 main: info.infinf.xaeroTracker.XaeroTracker
 api-version: '1.20'
 depend: []
+author: MioMiko
+commands:
+  xaerotracker:
+    description: Main command of XaeroTracker
+    permission: xaerotracker
+    permission-message: Permission denied
+    usage: /<command> <params>
+    aliases: [xt]
+permissions:
+  xaerotracker:
+    description: Whether you can use xaerotracker command
+    default: true
+  xaerotracker.toggleTracked:
+    description: Toggle whether yourself will be tracked
+    default: true
+  xaerotracker.toggleTracked.others:
+    description: Toggle whether a player will be tracked
+    default: op
+  xaerotracker.toggleTrackEveryone:
+    description: Toggle whether you can track everyone
+    default: op
+  xaerotracker.toggleTrackEveryone.others:
+    description: Toggle whether a player can track everyone
+    default: op
+  xaerotracker.*:
+    description: Full access to XaeroTracker command
+    default: op
+    children:
+      xaerotracker: true
+      xaerotracker.toggleTracked: true
+      xaerotracker.toggleTracked.others: true
+      xaerotracker.toggleTrackEveryone: true
+      xaerotracker.toggleTrackEveryone.others: true

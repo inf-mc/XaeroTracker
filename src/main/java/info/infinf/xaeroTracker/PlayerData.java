@@ -6,20 +6,22 @@ public class PlayerData {
     private int worldMapNetworkVersion;
     private int miniMapNetworkVersion;
     public long lastSyncTime;
+    public boolean lastShouldTrack;
     @Nullable public String channel;
 
     public PlayerData() {
-        this(0, 0, 0);
+        this(0, 0, 0, false);
     }
 
     public PlayerData(long lastSyncTime) {
-        this(0, 0, lastSyncTime);
+        this(0, 0, lastSyncTime, false);
     }
 
-    public PlayerData(int worldMapNetworkVersion, int miniMapNetworkVersion, long lastSyncTime) {
+    public PlayerData(int worldMapNetworkVersion, int miniMapNetworkVersion, long lastSyncTime, boolean lastShouldTrack) {
         this.worldMapNetworkVersion = worldMapNetworkVersion;
         this.miniMapNetworkVersion = miniMapNetworkVersion;
         this.lastSyncTime = lastSyncTime;
+        this.lastShouldTrack = false;
     }
 
     public int getWorldMapNetworkVersion() {
