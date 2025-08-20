@@ -4,6 +4,11 @@ import info.infinf.xaeroTracker.Commands.Executor;
 import info.infinf.xaeroTracker.util.MessageUtil;
 import info.infinf.xaeroTracker.util.PlayerUtil;
 import io.netty.buffer.Unpooled;
+import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.translation.GlobalTranslator;
+import net.kyori.adventure.translation.TranslationStore;
+import net.kyori.adventure.util.UTF8ResourceBundleControl;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
@@ -60,12 +65,25 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
             cmd.setExecutor(new Executor(this));
             cmd.setPermission("xaerotracker");
             cmd.setUsage(
-                    "/xt toggleTracked\n" +
-                    "/xt toggleTracked <player name>\n" +
-                    "/xt toggleTrackEveryone\n" +
-                    "/xt toggleTrackEveryone <player name>"
+                    """
+                    /xt toggleTracked
+                    /xt toggleTracked <player name>
+                    /xt toggleTrackEveryone
+                    /xt toggleTrackEveryone <player name>
+                    """
             );
         }
+
+        var store = TranslationStore.messageFormat(Key.key("xaerotracker:lang"));
+        store.registerAll(
+                Locale.US,
+                ResourceBundle.getBundle("lang.lang", Locale.US, UTF8ResourceBundleControl.get()),
+                true);
+        store.registerAll(
+                Locale.SIMPLIFIED_CHINESE,
+                ResourceBundle.getBundle("lang.lang", Locale.SIMPLIFIED_CHINESE, UTF8ResourceBundleControl.get()),
+                true);
+        GlobalTranslator.translator().addSource(store);
     }
 
     @EventHandler
