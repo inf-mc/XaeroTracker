@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "info.infinf"
-version = "1.1.0"
+version = "1.1.1"
 //paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.MOJANG_PRODUCTION
 
 repositories {
