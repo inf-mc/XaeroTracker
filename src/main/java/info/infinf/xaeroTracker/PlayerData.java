@@ -13,10 +13,6 @@ public class PlayerData {
         this(0, 0, 0, false);
     }
 
-    public PlayerData(long lastSyncTime) {
-        this(0, 0, lastSyncTime, false);
-    }
-
     public PlayerData(int worldMapNetworkVersion, int miniMapNetworkVersion, long lastSyncTime, boolean lastShouldTrack) {
         this.worldMapNetworkVersion = worldMapNetworkVersion;
         this.miniMapNetworkVersion = miniMapNetworkVersion;

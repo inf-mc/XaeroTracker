@@ -5,7 +5,6 @@ import info.infinf.xaeroTracker.util.MessageUtil;
 import info.infinf.xaeroTracker.util.PlayerUtil;
 import io.netty.buffer.Unpooled;
 import net.kyori.adventure.key.Key;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.translation.GlobalTranslator;
 import net.kyori.adventure.translation.TranslationStore;
 import net.kyori.adventure.util.UTF8ResourceBundleControl;
@@ -22,6 +21,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.InvocationTargetException;
+import java.text.MessageFormat;
 import java.util.*;
 
 public final class XaeroTracker extends JavaPlugin implements Listener {
@@ -35,6 +35,8 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
     public boolean shouldSendLevelId;
     public int levelId;
     public long syncCooldown;
+
+    private TranslationStore.StringBased<MessageFormat> translationStore;
 
     @Override
     public void onEnable() {
@@ -74,16 +76,17 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
             );
         }
 
-        var store = TranslationStore.messageFormat(Key.key("xaerotracker:lang"));
-        store.registerAll(
+        translationStore = TranslationStore.messageFormat(Key.key("xaerotracker:lang"));
+        translationStore.registerAll(
                 Locale.US,
-                ResourceBundle.getBundle("lang.lang", Locale.US, UTF8ResourceBundleControl.get()),
+                ResourceBundle.getBundle("locales.lang", Locale.US, UTF8ResourceBundleControl.get()),
                 true);
-        store.registerAll(
+        translationStore.registerAll(
                 Locale.SIMPLIFIED_CHINESE,
-                ResourceBundle.getBundle("lang.lang", Locale.SIMPLIFIED_CHINESE, UTF8ResourceBundleControl.get()),
+                ResourceBundle.getBundle("locales.lang", Locale.SIMPLIFIED_CHINESE, UTF8ResourceBundleControl.get()),
                 true);
-        GlobalTranslator.translator().addSource(store);
+        translationStore.defaultLocale(Locale.US);
+        GlobalTranslator.translator().addSource(translationStore);
     }
 
     @EventHandler
@@ -103,8 +106,9 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
             // won't add any channel to this player
         }
         pl.getWorld().getName();
-        track(pl);
-        playerData.put(pl, new PlayerData(System.currentTimeMillis()));
+        var data = new PlayerData();
+        playerData.put(pl, data);
+        track(pl, data);
     }
 
     @EventHandler
@@ -116,7 +120,7 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         var data = playerData.get(pl);
         if (data != null) {
             sendModderBothChannels(pl, data, MessageUtil.getLevelIdMessage(levelId));
-            track(pl);
+            track(pl, data);
         }
     }
 
@@ -127,11 +131,13 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         }
 
         var pl = e.getPlayer();
+        var data = playerData.get(pl);
+        if (data == null) {
+            return;
+        }
         var current = System.currentTimeMillis();
-        var data = playerData.computeIfAbsent(pl, (ignored) -> new PlayerData());
         if (current - data.lastSyncTime >= syncCooldown) {
-            track(pl);
-            data.lastSyncTime = current;
+            track(pl, data);
         }
     }
 
@@ -176,40 +182,31 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      *
      * @param pl
      */
-    public void track(Player pl) {
+    public void track(@NotNull Player pl, @NotNull PlayerData plData) {
         var msg = MessageUtil.getTrackPlayerMessage(pl);
         var server = pl.getServer();
         var shouldTrack = shouldBeTracked(pl);
 
-        for(var other: server.getOnlinePlayers()) {
-            if (other == pl || (!shouldTrack && !trackBypassList.contains(other.getName()))) {
-                continue;
-            }
-            var data = playerData.get(other);
-            if (data != null) {
-                sendModderOneChannel(other, data, msg);
-            }
-        }
-    }
-
-    /**
-     * Sync location of pl to other players on server, ignoring any other condition such as invisibility
-     *
-     * @param pl
-     */
-    public void trackUnconditionally(Player pl) {
-        var msg = MessageUtil.getTrackPlayerMessage(pl);
-        var server = pl.getServer();
-
-        for(var other: server.getOnlinePlayers()) {
+        for (var other: server.getOnlinePlayers()) {
             if (other == pl) {
                 continue;
             }
-            var data = playerData.get(other);
-            if (data != null) {
-                sendModderOneChannel(other, data, msg);
+
+            var otherData = playerData.get(other);
+            if (otherData == null) {
+                continue;
             }
+
+            if (!shouldTrack && !trackBypassList.contains(other.getName())) {
+                if (plData.lastShouldTrack) {
+                    sendModderOneChannel(other, otherData, MessageUtil.getUntrackPlayerMessage(pl));
+                }
+                continue;
+            }
+            sendModderOneChannel(other, otherData, msg);
         }
+        plData.lastShouldTrack = shouldTrack;
+        plData.lastSyncTime = System.currentTimeMillis();
     }
 
     /**
@@ -227,15 +224,19 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
     }
 
     /**
-     * Sync other players' location to pl, ignoring any other condition such as invisibility
+     * Send untrack message of all players who shouldn't be tracked to pl
      *
      * @param pl
-     * @param channel
      */
-    public void trackOthersUnconditionally(Player pl, String channel) {
-        for (var other: pl.getServer().getOnlinePlayers()) {
-            if (other != pl) {
-                pl.sendPluginMessage(this, channel, MessageUtil.getTrackPlayerMessage(other));
+    public void hideUntracked(Player pl) {
+        var data = playerData.get(pl);
+        if (data ==null) {
+            return;
+        }
+
+        for(var other: pl.getServer().getOnlinePlayers()) {
+            if (other != pl && !shouldBeTracked(other)) {
+                sendModderOneChannel(pl, data, MessageUtil.getUntrackPlayerMessage(other));
             }
         }
     }
@@ -309,6 +310,10 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         var messenger = Bukkit.getMessenger();
         messenger.unregisterIncomingPluginChannel(this);
         messenger.unregisterOutgoingPluginChannel(this);
+        GlobalTranslator.translator().removeSource(translationStore);
+        translationStore = null;
+        trackIgnoreList = null;
+        trackBypassList = null;
     }
 }
 
