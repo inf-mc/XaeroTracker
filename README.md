@@ -51,3 +51,10 @@ Require xaerotracker.toggleTrackEveryone permission.
 ## /xt toggleTrackEveryone <player name>
 Toggle whether a specific player can track any other player (bypass any other restriction).
 Require xaerotracker.toggleTrackEveryone.others permission.
+
+# Other Features
+## Permission based tracking rule
+
+### xaerotracker.tracker.{Player name}
+If player1 has permission xaerotracker.tracker.player2,
+then player1 will always see player2 on their map.

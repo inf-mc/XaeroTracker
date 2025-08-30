@@ -17,6 +17,8 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionDefault;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
@@ -178,6 +180,18 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
     }
 
     /**
+     * Should other track pl ignoring {@link #shouldBeTracked(Player)}
+     *
+     * @param pl
+     * @param other
+     * @return Should other track pl ignoring {@link #shouldBeTracked(Player)}
+     */
+    public boolean shouldBeTracked(Player pl, Player other) {
+        return trackBypassList.contains(other.getName()) ||
+                other.hasPermission(new Permission("xaerotracker.tracker." + pl.getName(), PermissionDefault.FALSE));
+    }
+
+    /**
      * Sync location of pl to other players on server
      *
      * @param pl
@@ -186,6 +200,7 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         var msg = MessageUtil.getTrackPlayerMessage(pl);
         var server = pl.getServer();
         var shouldTrack = shouldBeTracked(pl);
+        byte[] untrackMsg = null;
 
         for (var other: server.getOnlinePlayers()) {
             if (other == pl) {
@@ -197,9 +212,12 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
                 continue;
             }
 
-            if (!shouldTrack && !trackBypassList.contains(other.getName())) {
+            if (!shouldTrack && !shouldBeTracked(pl, other)) {
                 if (plData.lastShouldTrack) {
-                    sendModderOneChannel(other, otherData, MessageUtil.getUntrackPlayerMessage(pl));
+                    if (untrackMsg == null) {
+                        untrackMsg = MessageUtil.getUntrackPlayerMessage(pl);
+                    }
+                    sendModderOneChannel(other, otherData, untrackMsg);
                 }
                 continue;
             }
@@ -217,7 +235,7 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      */
     public void trackOthers(Player pl, String channel) {
         for (var other: pl.getServer().getOnlinePlayers()) {
-            if (other != pl && (shouldBeTracked(other) || trackBypassList.contains(pl.getName()))) {
+            if (other != pl && (shouldBeTracked(other) || shouldBeTracked(other, pl))) {
                 pl.sendPluginMessage(this, channel, MessageUtil.getTrackPlayerMessage(other));
             }
         }
@@ -235,7 +253,7 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         }
 
         for(var other: pl.getServer().getOnlinePlayers()) {
-            if (other != pl && !shouldBeTracked(other)) {
+            if (other != pl && !shouldBeTracked(other) && !shouldBeTracked(pl, other)) {
                 sendModderOneChannel(pl, data, MessageUtil.getUntrackPlayerMessage(other));
             }
         }

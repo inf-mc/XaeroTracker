@@ -51,3 +51,10 @@ sync-cooldown: 250
 ## /xt toggleTrackEveryone <玩家名>
 切换指定玩家是否可以无视任何限制追踪其他玩家。
 需要 xaerotracker.toggleTrackEveryone.others 权限。
+
+# 其他功能
+## 基于权限的追踪规则控制
+
+### xaerotracker.tracker.{玩家名}
+如果 player1 拥有权限 xaerotracker.tracker.player2，
+那么 player1 将会一直在地图上看见 player2.
