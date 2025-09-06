@@ -13,30 +13,39 @@ import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionDefault;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.InvocationTargetException;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * The main function of this plugin doesn't affect the main logic of minecraft.
+ * So it is not necessary to process things in Server Thread.
+ * So most of the logic of this plugin is put to Xaero Tracker Thread
+ */
 public final class XaeroTracker extends JavaPlugin implements Listener {
     public static final @NotNull String MINIMAP_PACKET_ID = "xaerominimap:main";
     public static final @NotNull String WORLD_MAP_PACKET_ID = "xaeroworldmap:main";
 
-    public final @NotNull Map<@NotNull Player, @NotNull PlayerData> playerData = new HashMap<>();
+    public final @NotNull Map<@NotNull Player, @NotNull PlayerData> playerData = new ConcurrentHashMap<>();
 
+    public ScheduledExecutorService trackerThread;
     public FilePlayerList trackIgnoreList;
     public FilePlayerList trackBypassList;
     public boolean shouldSendLevelId;
     public int levelId;
     public long syncCooldown;
+    public boolean onlySyncSameWorld;
 
     private TranslationStore.StringBased<MessageFormat> translationStore;
 
@@ -51,6 +60,7 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         }
         levelId = conf.getInt("level-id");
         syncCooldown = conf.getInt("sync-cooldown", 250);
+        onlySyncSameWorld = conf.getBoolean("only-sync-same-world", false);
 
         trackIgnoreList = new FilePlayerList(this, getDataPath().resolve("track_ignore_list.yml").toFile());
         trackBypassList = new FilePlayerList(this, getDataPath().resolve("track_bypass_list.yml").toFile());
@@ -89,11 +99,30 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
                 true);
         translationStore.defaultLocale(Locale.US);
         GlobalTranslator.translator().addSource(translationStore);
+
+        for (var pl: getServer().getOnlinePlayers()) {
+            initPlayer(pl, new PlayerData());
+        }
+
+        trackerThread = Executors.newSingleThreadScheduledExecutor(r -> {
+            var t = new Thread(null, r, "Xaero Tracker Thread", 0);
+            if (t.isDaemon())
+                t.setDaemon(false);
+            if (t.getPriority() != Thread.NORM_PRIORITY)
+                t.setPriority(Thread.NORM_PRIORITY);
+            return t;
+        });
+        trackerThread.submit(() -> {
+            for (var pl: getServer().getOnlinePlayers()) {
+                var data = playerData.get(pl);
+                if (data != null) {
+                    track(pl, data);
+                }
+            }
+        });
     }
 
-    @EventHandler
-    public void onJoin(PlayerJoinEvent e) {
-        var pl = e.getPlayer();
+    private void initPlayer(Player pl, PlayerData data) {
         try {
             var addChannel = pl.getClass().getMethod("addChannel", String.class);
             addChannel.invoke(pl, MINIMAP_PACKET_ID);
@@ -107,23 +136,48 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
             ex.printStackTrace();
             // won't add any channel to this player
         }
-        pl.getWorld().getName();
-        var data = new PlayerData();
         playerData.put(pl, data);
-        track(pl, data);
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent e) {
+        var pl = e.getPlayer();
+        var data = new PlayerData();
+        initPlayer(pl, data);
+        trackerThread.submit(() -> {
+            track(pl, data);
+        });
     }
 
     @EventHandler
     public void onPlayerChangedWorld(PlayerChangedWorldEvent e) {
-        if (!shouldSendLevelId) {
-            return;
-        }
-        var pl = e.getPlayer();
-        var data = playerData.get(pl);
-        if (data != null) {
-            sendModderBothChannels(pl, data, MessageUtil.getLevelIdMessage(levelId));
-            track(pl, data);
-        }
+        trackerThread.submit(() -> {
+            var pl = e.getPlayer();
+            var data = playerData.get(pl);
+            if (data != null) {
+                if (shouldSendLevelId) {
+                    sendModderBothChannels(pl, data, MessageUtil.getLevelIdMessage(levelId));
+                }
+                data.clearSyncSchedule();
+                track(pl, data);
+                if (onlySyncSameWorld) {
+                    sendModderOneChannel(pl, data, MessageUtil.getTrackResetMessage());
+                    trackOthers(pl, data.channel);
+                }
+            }
+            if (onlySyncSameWorld) {
+                var msg = MessageUtil.getUntrackPlayerMessage(pl);
+                for(var other: e.getFrom().getPlayers()) {
+                    if (other == pl) {
+                        continue;
+                    }
+                    var otherData = playerData.get(other);
+                    if (otherData != null) {
+                        sendModderOneChannel(other, otherData, msg);
+                    }
+                }
+            }
+        });
     }
 
     @EventHandler
@@ -131,45 +185,62 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         if (!e.hasExplicitlyChangedPosition()) {
             return;
         }
-
-        var pl = e.getPlayer();
-        var data = playerData.get(pl);
-        if (data == null) {
-            return;
-        }
-        var current = System.currentTimeMillis();
-        if (current - data.lastSyncTime >= syncCooldown) {
-            track(pl, data);
-        }
+        trackerThread.submit(() -> {
+            var pl = e.getPlayer();
+            var data = playerData.get(pl);
+            if (data == null) {
+                return;
+            }
+            data.clearSyncSchedule();
+            var lastSyncInterval = System.currentTimeMillis() - data.lastSyncTime;
+            if (lastSyncInterval >= syncCooldown) {
+                track(pl, data);
+            } else {
+                data.syncSchedule = trackerThread.schedule(
+                        () -> track(pl, data),
+                        syncCooldown - lastSyncInterval,
+                        TimeUnit.MILLISECONDS);
+            }
+        });
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
-        var pl = e.getPlayer();
-        untrack(pl);
-        playerData.remove(pl);
+        trackerThread.submit(() -> {
+            var pl = e.getPlayer();
+            untrack(pl, playerData.get(pl));
+            playerData.remove(pl);
+        });
     }
 
     public void onMinimapMessageReceived(@NotNull String channel, @NotNull Player pl, byte @NotNull [] message) {
-        var buf = Unpooled.wrappedBuffer(message);
-        if (buf.readByte() == 1) {
-            var version = buf.readInt();
-            var data = playerData.computeIfAbsent(pl, (ignored) -> new PlayerData());
-            data.setMiniMapNetworkVersion(version);
-        }
-        pl.sendPluginMessage(this, MINIMAP_PACKET_ID, MessageUtil.getTrackResetMessage());
-        trackOthers(pl, MINIMAP_PACKET_ID);
+        trackerThread.submit(() -> {
+            var buf = Unpooled.wrappedBuffer(message);
+            if (buf.readByte() == 1) {
+                var version = buf.readInt();
+                var data = playerData.computeIfAbsent(pl, (ignored) -> new PlayerData());
+                data.setMiniMapNetworkVersion(version);
+                if (data.hasWorldMap()) {
+                    pl.sendPluginMessage(this, WORLD_MAP_PACKET_ID, MessageUtil.getTrackResetMessage());
+                }
+                pl.sendPluginMessage(this, MINIMAP_PACKET_ID, MessageUtil.getTrackResetMessage());
+                trackOthers(pl, MINIMAP_PACKET_ID);
+            }
+        });
     }
 
     public void onWorldMapMessageReceived(@NotNull String channel, @NotNull Player pl, byte @NotNull [] message) {
-        var buf = Unpooled.wrappedBuffer(message);
-        if (buf.readByte() == 1) {
-            var version = buf.readInt();
-            var data = playerData.computeIfAbsent(pl, (ignored) -> new PlayerData());
-            data.setWorldMapNetworkVersion(version);
-        }
-        pl.sendPluginMessage(this, WORLD_MAP_PACKET_ID, MessageUtil.getTrackResetMessage());
-        trackOthers(pl, WORLD_MAP_PACKET_ID);
+        trackerThread.submit(() -> {
+            var buf = Unpooled.wrappedBuffer(message);
+            if (buf.readByte() == 1) {
+                var version = buf.readInt();
+                var data = playerData.computeIfAbsent(pl, (ignored) -> new PlayerData());
+                data.setWorldMapNetworkVersion(version);
+                if (!data.hasMiniMap()) {
+                    trackOthers(pl, WORLD_MAP_PACKET_ID);
+                }
+            }
+        });
     }
 
     public boolean shouldBeTracked(Player pl) {
@@ -198,11 +269,10 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      */
     public void track(@NotNull Player pl, @NotNull PlayerData plData) {
         var msg = MessageUtil.getTrackPlayerMessage(pl);
-        var server = pl.getServer();
         var shouldTrack = shouldBeTracked(pl);
         byte[] untrackMsg = null;
 
-        for (var other: server.getOnlinePlayers()) {
+        for (var other: onlySyncSameWorld ? pl.getWorld().getPlayers() : pl.getServer().getOnlinePlayers()) {
             if (other == pl) {
                 continue;
             }
@@ -234,7 +304,7 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      * @param channel
      */
     public void trackOthers(Player pl, String channel) {
-        for (var other: pl.getServer().getOnlinePlayers()) {
+        for (var other: onlySyncSameWorld ? pl.getWorld().getPlayers() : pl.getServer().getOnlinePlayers()) {
             if (other != pl && (shouldBeTracked(other) || shouldBeTracked(other, pl))) {
                 pl.sendPluginMessage(this, channel, MessageUtil.getTrackPlayerMessage(other));
             }
@@ -248,11 +318,11 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      */
     public void hideUntracked(Player pl) {
         var data = playerData.get(pl);
-        if (data ==null) {
+        if (data == null) {
             return;
         }
 
-        for(var other: pl.getServer().getOnlinePlayers()) {
+        for(var other: onlySyncSameWorld ? pl.getWorld().getPlayers() : pl.getServer().getOnlinePlayers()) {
             if (other != pl && !shouldBeTracked(other) && !shouldBeTracked(pl, other)) {
                 sendModderOneChannel(pl, data, MessageUtil.getUntrackPlayerMessage(other));
             }
@@ -264,15 +334,18 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      *
      * @param pl
      */
-    public void untrack(Player pl) {
+    public void untrack(@NotNull Player pl, @Nullable PlayerData plData) {
+        if (plData != null) {
+            plData.clearSyncSchedule();
+        }
         var msg = MessageUtil.getUntrackPlayerMessage(pl);
-        for(var other: pl.getServer().getOnlinePlayers()) {
+        for(var other: onlySyncSameWorld ? pl.getWorld().getPlayers() : pl.getServer().getOnlinePlayers()) {
             if (other == pl) {
                 continue;
             }
-            var data = playerData.get(other);
-            if (data != null) {
-                sendModderOneChannel(other, data, msg);
+            var otherData = playerData.get(other);
+            if (otherData != null) {
+                sendModderOneChannel(other, otherData, msg);
             }
         }
     }
@@ -297,8 +370,8 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      * @param msg
      */
     public void send(Player pl, byte[] msg) {
-        pl.sendPluginMessage(this, WORLD_MAP_PACKET_ID, msg);
         pl.sendPluginMessage(this, MINIMAP_PACKET_ID, msg);
+        pl.sendPluginMessage(this, WORLD_MAP_PACKET_ID, msg);
     }
 
     public void sendModderBothChannels(Player pl, @NotNull PlayerData data, byte[] msg) {
@@ -324,14 +397,29 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        playerData.clear();
-        var messenger = Bukkit.getMessenger();
-        messenger.unregisterIncomingPluginChannel(this);
-        messenger.unregisterOutgoingPluginChannel(this);
-        GlobalTranslator.translator().removeSource(translationStore);
-        translationStore = null;
-        trackIgnoreList = null;
-        trackBypassList = null;
+        trackerThread.submit(() -> {
+            // onDisable will be called after enable field is set to false
+            // But when enable filed is false, we can't sendPluginMessage
+            // Need Solution
+//            for (var pl: getServer().getOnlinePlayers()) {
+//                var data = playerData.get(pl);
+//                if (data != null) {
+//                    sendModderOneChannel(pl, data, MessageUtil.getTrackResetMessage());
+//                }
+//            }
+
+            playerData.clear();
+            var messenger = Bukkit.getMessenger();
+            messenger.unregisterIncomingPluginChannel(this);
+            messenger.unregisterOutgoingPluginChannel(this);
+            GlobalTranslator.translator().removeSource(translationStore);
+            translationStore = null;
+            trackIgnoreList = null;
+            trackBypassList = null;
+        });
+
+        trackerThread.close();
+        trackerThread = null;
     }
 }
 

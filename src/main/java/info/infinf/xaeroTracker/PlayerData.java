@@ -2,12 +2,15 @@ package info.infinf.xaeroTracker;
 
 import org.jetbrains.annotations.Nullable;
 
+import java.util.concurrent.Future;
+
 public class PlayerData {
     private int worldMapNetworkVersion;
     private int miniMapNetworkVersion;
     public long lastSyncTime;
     public boolean lastShouldTrack;
     @Nullable public String channel;
+    @Nullable public Future<?> syncSchedule;
 
     public PlayerData() {
         this(0, 0, 0, false);
@@ -54,6 +57,12 @@ public class PlayerData {
 
     public boolean hasMiniMap() {
         return miniMapNetworkVersion != 0;
+    }
+
+    public void clearSyncSchedule() {
+        if (syncSchedule != null) {
+            syncSchedule.cancel(true);
+        }
     }
 
     @Override

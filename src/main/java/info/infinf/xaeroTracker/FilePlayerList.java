@@ -5,8 +5,8 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.*;
-import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -28,14 +28,14 @@ public class FilePlayerList {
         this.file = file;
         LOGGER = plugin.getLogger();
         try (var fis = new FileInputStream(file)) {
-            tmpPlayerList = yaml.<HashSet<String>>load(fis);
+            tmpPlayerList = yaml.<ConcurrentHashMap.KeySetView<String, Boolean>>load(fis);
         } catch (FileNotFoundException e) {
-            tmpPlayerList = new HashSet<>();
+            tmpPlayerList = ConcurrentHashMap.newKeySet();
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Cannot load file " + file.toPath().toAbsolutePath(), e);
-            tmpPlayerList = new HashSet<>();
+            tmpPlayerList = ConcurrentHashMap.newKeySet();
         }
-        playerList = tmpPlayerList == null ? new HashSet<>() : tmpPlayerList;
+        playerList = tmpPlayerList == null ? ConcurrentHashMap.newKeySet() : tmpPlayerList;
     }
 
     public boolean toggle(String name) {

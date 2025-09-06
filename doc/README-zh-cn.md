@@ -14,6 +14,7 @@ XaeroTracker 是一个 Paper 插件，可以模拟 Xaero's World Map 的 everyon
 should-send-level-id: true
 level-id: -884219291
 sync-cooldown: 250
+only-sync-same-world: false
 ```
 
 ## should-send-level-id
@@ -26,6 +27,10 @@ sync-cooldown: 250
 
 ## sync-cooldown
 一个玩家在共享位置后多久无法被再次共享，单位毫秒。
+
+## only-sync-same-world
+是否应该只将一个玩家的位置同步到位于相同世界的其他玩家。
+这对类似于建筑托管服务器很有用。
 
 # 命令
 你需要 xaerotracker 权限来运行它们。

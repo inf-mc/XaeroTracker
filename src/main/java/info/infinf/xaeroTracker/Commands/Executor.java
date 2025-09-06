@@ -43,17 +43,19 @@ public class Executor implements TabExecutor {
                 if (args.length == 1) {
                     if (sender instanceof Player pl) {
                         if (sender.hasPermission("xaerotracker.toggleTracked")) {
-                            if (plugin.trackIgnoreList.toggle(pl.getName())) {
-                                sender.sendMessage(Component.translatable(
-                                        "xaerotracker.command.succeed_toggle_not_be_tracked", SUCCEEDED_STYLE));
-                            } else {
-                                sender.sendMessage(Component.translatable(
-                                        "xaerotracker.command.succeed_toggle_be_tracked", SUCCEEDED_STYLE));
-                            }
-                            var data = plugin.playerData.get(pl);
-                            if (data != null) {
-                                plugin.track(pl, data);
-                            }
+                            plugin.trackerThread.submit(() -> {
+                                if (plugin.trackIgnoreList.toggle(pl.getName())) {
+                                    sender.sendMessage(Component.translatable(
+                                            "xaerotracker.command.succeed_toggle_not_be_tracked", SUCCEEDED_STYLE));
+                                } else {
+                                    sender.sendMessage(Component.translatable(
+                                            "xaerotracker.command.succeed_toggle_be_tracked", SUCCEEDED_STYLE));
+                                }
+                                var data = plugin.playerData.get(pl);
+                                if (data != null) {
+                                    plugin.track(pl, data);
+                                }
+                            });
                             return true;
                         }
                         sender.sendMessage(Component.translatable("xaerotracker.command.permission", FAILED_STYLE));
@@ -63,23 +65,25 @@ public class Executor implements TabExecutor {
                     return true;
                 } else /* length == 2 */ {
                     if (sender.hasPermission("xaerotracker.toggleTracked.others")) {
-                        var name = args[1];
-                        if (plugin.trackIgnoreList.toggle(name)) {
-                            sender.sendMessage(Component.translatable(
-                                    "xaerotracker.command.succeed_toggle_other_not_be_tracked",
-                                    SUCCEEDED_STYLE,
-                                    Component.text(name)));
-                        } else {
-                            sender.sendMessage(Component.translatable(
-                                    "xaerotracker.command.succeed_toggle_other_be_tracked",
-                                    SUCCEEDED_STYLE,
-                                    Component.text(name)));
-                        }
-                        var pl = plugin.getServer().getPlayerExact(name);
-                        var data = plugin.playerData.get(pl);
-                        if (pl != null && data != null) {
-                            plugin.track(pl, data);
-                        }
+                        plugin.trackerThread.submit(() -> {
+                            var name = args[1];
+                            if (plugin.trackIgnoreList.toggle(name)) {
+                                sender.sendMessage(Component.translatable(
+                                        "xaerotracker.command.succeed_toggle_other_not_be_tracked",
+                                        SUCCEEDED_STYLE,
+                                        Component.text(name)));
+                            } else {
+                                sender.sendMessage(Component.translatable(
+                                        "xaerotracker.command.succeed_toggle_other_be_tracked",
+                                        SUCCEEDED_STYLE,
+                                        Component.text(name)));
+                            }
+                            var pl = plugin.getServer().getPlayerExact(name);
+                            var data = plugin.playerData.get(pl);
+                            if (pl != null && data != null) {
+                                plugin.track(pl, data);
+                            }
+                        });
                         return true;
                     }
                     sender.sendMessage(Component.translatable("xaerotracker.command.permission", FAILED_STYLE));
@@ -94,20 +98,22 @@ public class Executor implements TabExecutor {
                  if (args.length == 1) {
                      if (sender instanceof Player pl) {
                          if (sender.hasPermission("xaerotracker.toggleTrackEveryone")) {
-                             var data = plugin.playerData.get(pl);
-                             if (plugin.trackBypassList.toggle(pl.getName())) {
-                                 sender.sendMessage(Component.translatable(
-                                         "xaerotracker.command.succeed_toggle_track_everyone", SUCCEEDED_STYLE));
-                                 if (data != null) {
-                                     plugin.trackOthers(pl, data.channel);
+                             plugin.trackerThread.submit(() -> {
+                                 var data = plugin.playerData.get(pl);
+                                 if (plugin.trackBypassList.toggle(pl.getName())) {
+                                     sender.sendMessage(Component.translatable(
+                                             "xaerotracker.command.succeed_toggle_track_everyone", SUCCEEDED_STYLE));
+                                     if (data != null) {
+                                         plugin.trackOthers(pl, data.channel);
+                                     }
+                                 } else {
+                                     sender.sendMessage(Component.translatable(
+                                             "xaerotracker.command.succeed_toggle_not_track_everyone", SUCCEEDED_STYLE));
+                                     if (data != null) {
+                                         plugin.hideUntracked(pl);
+                                     }
                                  }
-                             } else {
-                                 sender.sendMessage(Component.translatable(
-                                         "xaerotracker.command.succeed_toggle_not_track_everyone", SUCCEEDED_STYLE));
-                                 if (data != null) {
-                                     plugin.hideUntracked(pl);
-                                 }
-                             }
+                             });
                              return true;
                          }
                          sender.sendMessage(Component.translatable("xaerotracker.command.permission", FAILED_STYLE));
@@ -118,25 +124,28 @@ public class Executor implements TabExecutor {
                  } else /* length == 2 */ {
                      var name = args[1];
                      if (sender.hasPermission("xaerotracker.toggleTrackEveryone.others")) {
-                         var pl = plugin.getServer().getPlayerExact(name);
-                         var data = plugin.playerData.get(pl);
-                         if (plugin.trackBypassList.toggle(name)) {
-                             sender.sendMessage(Component.translatable(
-                                     "xaerotracker.command.succeed_toggle_other_track_everyone",
-                                     SUCCEEDED_STYLE,
-                                     Component.text(name)));
-                             if (pl != null && data != null) {
-                                 plugin.trackOthers(pl, data.channel);
+                         plugin.trackerThread.submit(() -> {
+                             var pl = plugin.getServer().getPlayerExact(name);
+                             var data = plugin.playerData.get(pl);
+                             if (plugin.trackBypassList.toggle(name)) {
+
+                                 sender.sendMessage(Component.translatable(
+                                         "xaerotracker.command.succeed_toggle_other_track_everyone",
+                                         SUCCEEDED_STYLE,
+                                         Component.text(name)));
+                                 if (pl != null && data != null) {
+                                     plugin.trackOthers(pl, data.channel);
+                                 }
+                             } else {
+                                 sender.sendMessage(Component.translatable(
+                                         "xaerotracker.command.succeed_toggle_other_not_track_everyone",
+                                         SUCCEEDED_STYLE,
+                                         Component.text(args[1])));
+                                 if (pl != null && data != null) {
+                                     plugin.hideUntracked(pl);
+                                 }
                              }
-                         } else {
-                             sender.sendMessage(Component.translatable(
-                                     "xaerotracker.command.succeed_toggle_other_not_track_everyone",
-                                     SUCCEEDED_STYLE,
-                                     Component.text(args[1])));
-                             if (pl != null && data != null) {
-                                 plugin.hideUntracked(pl);
-                             }
-                         }
+                         });
                          return true;
                      }
                      sender.sendMessage(Component.translatable("xaerotracker.command.permission", FAILED_STYLE));

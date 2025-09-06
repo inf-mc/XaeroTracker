@@ -14,6 +14,7 @@ This plugin has only been tested on 1.20.1 and 1.21.4 .
 should-send-level-id: true
 level-id: -884219291
 sync-cooldown: 250
+only-sync-same-world: false
 ```
 
 ## should-send-level-id
@@ -24,8 +25,12 @@ But if you are using Leaves server and turned XareoProtocol on, you should disab
 It will be randomly generated when the plugin is first loaded.
 Client uses it to tell different servers under the same domain.
 It's useful when you are using velocity proxy, every sub server should have different value of it.
+
 ## sync-cooldown
 How long should a player's location can't be synced again. (unit millisecond)
+
+## only-sync-same-world
+Should only sync a player's position to players in the same world.
 
 # Command
 You need xaerotracker permission to execute any of this.
