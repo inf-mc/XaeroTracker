@@ -16,7 +16,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.20.1-R0.1-SNAPSHOT")
     compileOnly("org.jetbrains:annotations:16.0.2")
     compileOnly("io.netty:netty-all:4.2.3.Final")
     implementation("net.kyori:adventure-api:4.20.0")
@@ -24,7 +24,7 @@ dependencies {
 
 tasks {
     runServer {
-        minecraftVersion("1.21.4")
+        minecraftVersion("1.20.1")
     }
 }
 

@@ -2,6 +2,7 @@ name: XaeroTracker
 version: ${version}
 main: info.infinf.xaeroTracker.XaeroTracker
 api-version: '1.20'
+folia-supported: true
 depend: []
 author: MioMiko
 commands:

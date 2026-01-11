@@ -62,8 +62,10 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
         syncCooldown = conf.getInt("sync-cooldown", 250);
         onlySyncSameWorld = conf.getBoolean("only-sync-same-world", false);
 
-        trackIgnoreList = new FilePlayerList(this, getDataPath().resolve("track_ignore_list.yml").toFile());
-        trackBypassList = new FilePlayerList(this, getDataPath().resolve("track_bypass_list.yml").toFile());
+        trackIgnoreList = new FilePlayerList(this,
+                getDataFolder().toPath().resolve("track_ignore_list.yml").toFile());
+        trackBypassList = new FilePlayerList(this,
+                getDataFolder().toPath().resolve("track_bypass_list.yml").toFile());
 
         var messenger = Bukkit.getMessenger();
         messenger.registerIncomingPluginChannel(
