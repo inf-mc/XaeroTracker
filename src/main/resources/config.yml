@@ -1,3 +1,6 @@
 should-send-level-id: true
 sync-cooldown: 250
 only-sync-same-world: false
+
+sync-worldmap: true
+sync-minimap: true

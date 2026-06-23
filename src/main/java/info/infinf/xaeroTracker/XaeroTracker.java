@@ -372,8 +372,12 @@ public final class XaeroTracker extends JavaPlugin implements Listener {
      * @param msg
      */
     public void send(Player pl, byte[] msg) {
-        pl.sendPluginMessage(this, MINIMAP_PACKET_ID, msg);
-        pl.sendPluginMessage(this, WORLD_MAP_PACKET_ID, msg);
+        if (getConfig().getBoolean("sync-minimap")) {
+            pl.sendPluginMessage(this, MINIMAP_PACKET_ID, msg);
+        }
+        if (getConfig().getBoolean("sync-worldmap")) {
+            pl.sendPluginMessage(this, WORLD_MAP_PACKET_ID, msg);
+        }
     }
 
     public void sendModderBothChannels(Player pl, @NotNull PlayerData data, byte[] msg) {
