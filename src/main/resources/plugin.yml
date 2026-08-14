@@ -3,7 +3,7 @@ version: ${version}
 main: info.infinf.xaeroTracker.XaeroTracker
 description: Shows eligible online players on compatible Xaero maps.
 website: https://github.com/inf-mc/XaeroTracker
-api-version: '26.2'
+api-version: '1.21'
 author: MioMiko
 commands:
   xaerotracker:
