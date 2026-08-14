@@ -1,37 +1,40 @@
 plugins {
     id("java")
-    id("com.gradleup.shadow") version "8.3.0"
-    id("xyz.jpenilla.run-paper") version "2.3.1"
+    id("com.gradleup.shadow") version "9.6.1"
+    id("xyz.jpenilla.run-paper") version "3.0.2"
 }
 
 group = "info.infinf"
-version = "1.3.1"
+version = "1.4.0"
 
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/") {
         name = "papermc-repo"
     }
-    maven("https://repo.dmulloy2.net/repository/public/" )
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.20.1-R0.1-SNAPSHOT")
-    compileOnly("org.jetbrains:annotations:16.0.2")
-    compileOnly("io.netty:netty-all:4.2.3.Final")
-    implementation("net.kyori:adventure-api:4.20.0")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.87-stable")
 }
 
 tasks {
     runServer {
-        minecraftVersion("1.20.1")
+        minecraftVersion("26.2")
     }
 }
 
-val targetJavaVersion = 21
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+}
 
 tasks.build {
     dependsOn("shadowJar")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(25)
 }
 
 tasks.processResources {

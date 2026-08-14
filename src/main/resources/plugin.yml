@@ -1,9 +1,9 @@
 name: XaeroTracker
 version: ${version}
 main: info.infinf.xaeroTracker.XaeroTracker
-api-version: '1.20'
-folia-supported: true
-depend: []
+description: Shows eligible online players on compatible Xaero maps.
+website: https://github.com/inf-mc/XaeroTracker
+api-version: '26.2'
 author: MioMiko
 commands:
   xaerotracker:

@@ -1,8 +1,7 @@
 package info.infinf.xaeroTracker;
 
+import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.concurrent.Future;
 
 public class PlayerData {
     private int worldMapNetworkVersion;
@@ -10,7 +9,7 @@ public class PlayerData {
     public long lastSyncTime;
     public boolean lastShouldTrack;
     @Nullable public String channel;
-    @Nullable public Future<?> syncSchedule;
+    @Nullable public BukkitTask syncSchedule;
 
     public PlayerData() {
         this(0, 0, 0, false);
@@ -20,7 +19,7 @@ public class PlayerData {
         this.worldMapNetworkVersion = worldMapNetworkVersion;
         this.miniMapNetworkVersion = miniMapNetworkVersion;
         this.lastSyncTime = lastSyncTime;
-        this.lastShouldTrack = false;
+        this.lastShouldTrack = lastShouldTrack;
     }
 
     public int getWorldMapNetworkVersion() {
@@ -42,9 +41,9 @@ public class PlayerData {
     }
 
     private void decideChannel() {
-        if (miniMapNetworkVersion == 3) {
+        if (miniMapNetworkVersion == XaeroTracker.SUPPORTED_NETWORK_VERSION) {
             channel = XaeroTracker.MINIMAP_PACKET_ID;
-        } else if (worldMapNetworkVersion == 3) {
+        } else if (worldMapNetworkVersion == XaeroTracker.SUPPORTED_NETWORK_VERSION) {
             channel = XaeroTracker.WORLD_MAP_PACKET_ID;
         } else {
             channel = null;
@@ -61,7 +60,8 @@ public class PlayerData {
 
     public void clearSyncSchedule() {
         if (syncSchedule != null) {
-            syncSchedule.cancel(true);
+            syncSchedule.cancel();
+            syncSchedule = null;
         }
     }
 

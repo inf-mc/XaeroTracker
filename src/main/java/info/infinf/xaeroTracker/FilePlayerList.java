@@ -4,7 +4,14 @@ import org.jetbrains.annotations.NotNull;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
-import java.io.*;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -15,7 +22,7 @@ public class FilePlayerList {
 
     private final Logger LOGGER;
     private final @NotNull Set<@NotNull String> playerList;
-    public File file;
+    private final File file;
 
     static {
         var dumperOptions = new DumperOptions();
@@ -23,19 +30,30 @@ public class FilePlayerList {
         yaml = new Yaml(dumperOptions);
     }
 
-    public FilePlayerList(XaeroTracker plugin, File file) {
-        Set<@NotNull String> tmpPlayerList;
+    public FilePlayerList(@NotNull XaeroTracker plugin, File file) {
         this.file = file;
         LOGGER = plugin.getLogger();
+
+        Set<@NotNull String> tmpPlayerList = ConcurrentHashMap.newKeySet();
         try (var fis = new FileInputStream(file)) {
-            tmpPlayerList = yaml.<ConcurrentHashMap.KeySetView<String, Boolean>>load(fis);
-        } catch (FileNotFoundException e) {
-            tmpPlayerList = ConcurrentHashMap.newKeySet();
+            var loaded = yaml.load(fis);
+            if (loaded instanceof Collection<?> loadedCollection) {
+                for (var entry : loadedCollection) {
+                    if (entry instanceof String playerName) {
+                        tmpPlayerList.add(playerName);
+                    } else {
+                        LOGGER.warning("Ignoring a non-string entry in " + file.toPath().toAbsolutePath());
+                    }
+                }
+            } else if (loaded != null) {
+                LOGGER.warning("Ignoring invalid player list in " + file.toPath().toAbsolutePath());
+            }
+        } catch (FileNotFoundException ignored) {
+            // The list is empty until the first toggle creates the file.
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Cannot load file " + file.toPath().toAbsolutePath(), e);
-            tmpPlayerList = ConcurrentHashMap.newKeySet();
         }
-        playerList = tmpPlayerList == null ? ConcurrentHashMap.newKeySet() : tmpPlayerList;
+        playerList = tmpPlayerList;
     }
 
     public boolean toggle(String name) {
@@ -55,8 +73,8 @@ public class FilePlayerList {
     }
 
     protected void save() {
-        try (var fw = new FileWriter(file)) {
-            yaml.dump(playerList, fw);
+        try (var writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
+            yaml.dump(playerList, writer);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

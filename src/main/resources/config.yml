@@ -1,3 +1,9 @@
+# Send the server level ID used by Xaero clients to separate map data.
+# Keep this enabled unless another server implementation sends the ID.
 should-send-level-id: true
+
+# Minimum delay, in milliseconds, between position updates for one player.
 sync-cooldown: 250
+
+# Only share positions between players in the same Bukkit world.
 only-sync-same-world: false

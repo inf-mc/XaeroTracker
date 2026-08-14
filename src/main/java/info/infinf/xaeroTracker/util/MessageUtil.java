@@ -1,54 +1,51 @@
 package info.infinf.xaeroTracker.util;
 
-import io.netty.buffer.ByteBufOutputStream;
-import io.netty.buffer.Unpooled;
+import info.infinf.xaeroTracker.XaeroTracker;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 
-public class MessageUtil {
-    public static byte[] getLevelIdMessage(int levelId) {
-        // 1 (MessageType) + 4 (LevelId)
-        var msg = Unpooled.buffer(5);
+public final class MessageUtil {
+    private static final byte LEVEL_ID_PACKET = 0;
+    private static final byte HANDSHAKE_PACKET = 1;
+    private static final byte TRACKED_PLAYER_PACKET = 2;
+    private static final byte RESET_PACKET = 3;
 
-        msg.writeByte(0);
-        msg.writeInt(levelId);
-        msg.capacity(msg.writerIndex());
-
-        return msg.array();
+    private MessageUtil() {
     }
 
-    public static byte[] getHandshakeMessage() {
-        // 1 (MessageType) + 4 (Protocol version)
-        var msg = Unpooled.buffer(5);
-
-        msg.writeByte(1);
-        msg.writeInt(3);
-        msg.capacity(msg.writerIndex());
-
-        return msg.array();
+    public static byte @NotNull [] getLevelIdMessage(int levelId) {
+        return ByteBuffer.allocate(5)
+                .put(LEVEL_ID_PACKET)
+                .putInt(levelId)
+                .array();
     }
 
-    public static byte[] getTrackPlayerMessage(Player pl) {
+    public static byte @NotNull [] getHandshakeMessage() {
+        return ByteBuffer.allocate(5)
+                .put(HANDSHAKE_PACKET)
+                .putInt(XaeroTracker.SUPPORTED_NETWORK_VERSION)
+                .array();
+    }
+
+    public static byte @NotNull [] getTrackPlayerMessage(@NotNull Player pl) {
         // 1 (MessageType) + 1 (CompoundTagType)
-        // 24 (6 Tags, 1 byte for TagType, 2 for TagName length, 1 for TagName, 4 bytes per Tag) +
+        // 24 (6 Tags, 4 bytes per Tag == 1 byte for TagType + 2 for TagName length + 1 for TagName) +
         // 1 (boolean tag) + 24 (3 double tags) + 20 (UUID int array) +
-        // 22 (dimension ResourceLocation minecraft:the_nether)
-        var msg = Unpooled.buffer(93);
+        // 22 (dimension ResourceLocation minecraft:the_nether) +
+        // 1 (EndTag) +
+        // Extra bytes for redundancy
+        // Packet type followed by an unnamed NBT compound.
+        var msg = new ByteArrayOutputStream(100);
 
-        msg.writeByte(2);
-
-//        CompoundTag nbt = new CompoundTag();
-//        nbt.putBoolean("r", false);
-//        nbt.putIntArray("i", UUIDUtil.uuidToIntArray(pl.getUniqueId()));
-//        nbt.putDouble("x", pl.getX());
-//        nbt.putDouble("y", pl.getY());
-//        nbt.putDouble("z", pl.getZ());
-//        nbt.putString("d", pl.getWorld().getKey().toString());
-//        FriendlyByteBuf.writeNbt(msg, nbt);
-
-        // ugly implementation of nbt io for compatibility, don't care about it
-        try (var wrappedMsg = new ByteBufOutputStream(msg)) {
+        try (var wrappedMsg = new DataOutputStream(msg)) {
+            wrappedMsg.writeByte(TRACKED_PLAYER_PACKET);
             var uuidArray = UUIDUtil.uuidToIntArray(pl.getUniqueId());
             wrappedMsg.writeByte(10);
             wrappedMsg.writeByte(1);
@@ -73,30 +70,23 @@ public class MessageUtil {
             wrappedMsg.writeUTF("d");
             wrappedMsg.writeUTF(pl.getWorld().getKey().toString());
             wrappedMsg.writeByte(0);
-        } catch (IOException ignored) {
-            // impossible
+        } catch (IOException ex) {
+            throw new UncheckedIOException("Could not encode a tracked-player packet", ex);
         }
 
-        msg.capacity(msg.writerIndex());
-
-        return msg.array();
+        return msg.toByteArray();
     }
 
-    public static byte[] getUntrackPlayerMessage(Player pl) {
+    public static byte @NotNull [] getUntrackPlayerMessage(@NotNull Player pl) {
         // 1 (MessageType) + 1 (CompoundTagType)
         // 8 (2 Tags, 1 byte for TagType, 2 for TagName length, 1 for TagName, 4 bytes per Tag) +
         // 1 (boolean tag) + 20 (UUID int array)
-        var msg = Unpooled.buffer(31);
+        // 1 (EndTag)
+        // The same NBT packet with the remove flag and the player's UUID.
+        var msg = new ByteArrayOutputStream(32);
 
-        msg.writeByte(2);
-
-//        CompoundTag nbt = new CompoundTag();
-//        nbt.putBoolean("r", true);
-//        nbt.putIntArray("i", UUIDUtil.uuidToIntArray(pl.getUniqueId()));
-//        FriendlyByteBuf.writeNbt(msg, nbt);
-
-        // ugly implementation of nbt io for compatibility, don't care about it
-        try (var wrappedMsg = new ByteBufOutputStream(msg)) {
+        try (var wrappedMsg = new DataOutputStream(msg)) {
+            wrappedMsg.writeByte(TRACKED_PLAYER_PACKET);
             var uuidArray = UUIDUtil.uuidToIntArray(pl.getUniqueId());
             wrappedMsg.writeByte(10);
             wrappedMsg.writeByte(1);
@@ -109,22 +99,15 @@ public class MessageUtil {
                 wrappedMsg.writeInt(i);
             }
             wrappedMsg.writeByte(0);
-        } catch (IOException ignored) {
-            // impossible
+        } catch (IOException ex) {
+            throw new UncheckedIOException("Could not encode an untracked-player packet", ex);
         }
 
-        msg.capacity(msg.writerIndex());
-
-        return msg.array();
+        return msg.toByteArray();
     }
 
-    public static byte[] getTrackResetMessage() {
-        // 1 (MessageType)
-        var msg = Unpooled.buffer(1);
-
-        msg.writeByte(3);
-        msg.capacity(msg.writerIndex());
-
-        return msg.array();
+    @Contract(value = " -> new", pure = true)
+    public static byte @NotNull [] getTrackResetMessage() {
+        return new byte[] {RESET_PACKET};
     }
 }
